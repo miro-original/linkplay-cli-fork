@@ -1,6 +1,6 @@
 import urllib.parse
 from ipaddress import IPv4Address
-from typing import List
+from typing import List, Optional
 
 from async_upnp_client.search import async_search
 
@@ -23,7 +23,7 @@ def _get_linkplay_device_status(ip_address: IPv4Address, port: int, protocol: Re
         expect_json=True)
 
 
-def _get_valid_linkplay_device_configuration_from_upnp_location(upnp_location: str) -> Device | None:
+def _get_valid_linkplay_device_configuration_from_upnp_location(upnp_location: str) -> Optional[Device]:
     ip_address = IPv4Address(urllib.parse.urlparse(upnp_location).hostname)
     for http_port in config.http_ports:
         try:

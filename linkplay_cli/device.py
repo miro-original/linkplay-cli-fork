@@ -1,8 +1,8 @@
 import ipaddress
 from dataclasses import dataclass
-from typing import Literal, TypeAlias
+from typing import Literal
 
-RequestProtocol: TypeAlias = Literal["http", "https"]
+RequestProtocol = Literal["http", "https"]
 
 @dataclass
 class Device:
