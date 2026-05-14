@@ -54,7 +54,7 @@ class Upnp:
             return None
 
         soup_match_result = re.match(r'Playlist · (?P<owner>[\w\s]+) ·', og_description['content'])
-        if not match_result:
+        if not soup_match_result:
             logging.debug(f'Failed parsing Open Graph description: {og_description["content"]}')
             return None
 
