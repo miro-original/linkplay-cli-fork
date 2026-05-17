@@ -13,6 +13,7 @@ from linkplay_cli.player_status import PlayerStatus, PLAYBACK_MODE_NUMBER_TO_NAM
 from linkplay_cli.utils import run_async_function_synchronously, player_status_string_to_emoji
 
 PLAYLIST_ID_IN_TRACK_SOURCE_REGEX = r'spotify:playlist:(?P<playlist_id>[a-zA-Z0-9]+)'
+COLLECTION_TRACK_SOURCE_REGEX = r'spotify:user:(?P<user_id>[a-zA-Z0-9]+):collection(?::artist:(?P<artist_id>[a-zA-Z0-9]+))?'
 
 
 class Upnp:
@@ -49,16 +50,69 @@ class Upnp:
 
         soup = BeautifulSoup(playlist_response.text, 'html.parser')
         og_description = soup.find('meta', property='og:description')
-        if not og_description or not og_description.get('content'):
+        og_description_content = og_description.get('content') if og_description else None
+        if not isinstance(og_description_content, str):
             logging.debug(f'Failed getting Open Graph description: {og_description}')
             return None
 
-        soup_match_result = re.match(r'Playlist · (?P<owner>[\w\s]+) ·', og_description['content'])
+        soup_match_result = re.match(r'Playlist · (?P<owner>[\w\s]+) ·', og_description_content)
         if not soup_match_result:
-            logging.debug(f'Failed parsing Open Graph description: {og_description["content"]}')
+            logging.debug(f'Failed parsing Open Graph description: {og_description_content}')
             return None
 
         return soup_match_result.group('owner')
+
+    @staticmethod
+    def _get_collection_owner(track_source: str) -> Optional[str]:
+        match_result = re.match(COLLECTION_TRACK_SOURCE_REGEX, track_source)
+        if not match_result:
+            logging.debug(f'TrackSource is not a Spotify collection: {track_source}')
+            return None
+        user_id = match_result.group('user_id')
+
+        try:
+            user_response = requests.get(f'https://open.spotify.com/user/{user_id}')
+        except requests.exceptions.RequestException as e:
+            logging.debug(f'Spotify user request failed with the following exception: {e}')
+            return None
+        if user_response.status_code != HTTPStatus.OK:
+            logging.debug(f'Spotify user request failed with status code {user_response.status_code}')
+            return None
+
+        soup = BeautifulSoup(user_response.text, 'html.parser')
+        og_title = soup.find('meta', property='og:title')
+        og_title_content = og_title.get('content') if og_title else None
+        if not isinstance(og_title_content, str):
+            logging.debug(f'Failed getting Open Graph title: {og_title}')
+            return None
+
+        return og_title_content
+
+    @staticmethod
+    def _get_collection_artist(track_source: str) -> Optional[str]:
+        match_result = re.match(COLLECTION_TRACK_SOURCE_REGEX, track_source)
+        artist_id = match_result.group('artist_id') if match_result else None
+        if not artist_id:
+            logging.debug(f'TrackSource is not a Spotify collection filtered by artist: {track_source}')
+            return None
+
+        try:
+            artist_response = requests.get(f'https://open.spotify.com/artist/{artist_id}')
+        except requests.exceptions.RequestException as e:
+            logging.debug(f'Spotify artist request failed with the following exception: {e}')
+            return None
+        if artist_response.status_code != HTTPStatus.OK:
+            logging.debug(f'Spotify artist request failed with status code {artist_response.status_code}')
+            return None
+
+        soup = BeautifulSoup(artist_response.text, 'html.parser')
+        og_title = soup.find('meta', property='og:title')
+        og_title_content = og_title.get('content') if og_title else None
+        if not isinstance(og_title_content, str):
+            logging.debug(f'Failed getting Open Graph title: {og_title}')
+            return None
+
+        return og_title_content
 
 
     def get_player_status(self):
@@ -77,7 +131,9 @@ class Upnp:
         album = album_element.get_text() if album_element else UNKNOWN_NAME_STRING
         playlist_element = track_metadata_xml_soup.find('song:subid')
         playlist_name = playlist_element.get_text() if playlist_element else None
-        playlist_owner = self._get_playlist_owner(info['TrackSource']) if playlist_name else None
+        track_source = info['TrackSource']
+        playlist_name = playlist_name or self._get_collection_artist(track_source)
+        playlist_owner = (self._get_playlist_owner(track_source) or self._get_collection_owner(track_source)) if playlist_name else None
         playlist_string = f"{playlist_name} by {playlist_owner}" if playlist_owner else playlist_name
 
         playback_mode = int(info['PlayType'])
