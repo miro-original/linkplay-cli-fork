@@ -5,9 +5,6 @@ import warnings
 from http import HTTPStatus
 from typing import Literal
 
-import urllib3
-from urllib3.exceptions import InsecureRequestWarning
-
 from linkplay_cli import config
 
 UNKNOWN_COMMAND_STRING = "unknown command"
@@ -33,6 +30,8 @@ def _supress_openssl_warning_when_importing_requests():
 
 _supress_openssl_warning_when_importing_requests()
 import requests
+import urllib3
+from urllib3.exceptions import InsecureRequestWarning
 urllib3.disable_warnings(InsecureRequestWarning)
 
 
