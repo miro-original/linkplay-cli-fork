@@ -11,6 +11,7 @@ setup(name='linkplay-cli',
       long_description_content_type='text/markdown',
       url='https://github.com/ramikg/linkplay-cli',
       version='0.1.4',
+      python_requires='>=3.9',
       packages=find_packages(),
       package_data={
           '': ['certs/*'],
