@@ -20,6 +20,7 @@ from linkplay_cli.configure import prompt_user_to_choose_active_device, \
 from linkplay_cli.discovery import discover_linkplay_devices, is_valid_linkplay_device
 from linkplay_cli.firmware_update import print_latest_version_and_release_date
 from linkplay_cli.player_status import PlayerStatus, UNKNOWN_NAME_STRING, PLAYBACK_MODE_NUMBER_TO_NAME
+from linkplay_cli.spotify import get_playlist_string
 from linkplay_cli.tcp_uart import TcpUart
 from linkplay_cli.upnp import Upnp
 from linkplay_cli.utils import perform_get_request, LinkplayCliGetRequestUnknownCommandException, \
@@ -129,7 +130,7 @@ class LinkplayCli:
     def _encode_string(s):
         return bytes(s, 'utf-8').hex()
 
-    def _get_player_status(self) -> PlayerStatus:
+    def _get_player_status(self, resolve_playlist: bool = False) -> PlayerStatus:
         try:
             player_status = self._run_command('getPlayerStatusEx', expect_json=True)
 
@@ -150,6 +151,10 @@ class LinkplayCli:
             else:
                 playback_mode_string = UNKNOWN_NAME_STRING
 
+            vendor = player_status.get('vendor')
+            # In some devices the vendor is in the format of `spotify:playlist:<id>`
+            playlist = get_playlist_string(vendor) if (resolve_playlist and vendor) else None
+
             return PlayerStatus(
                 status_emoji=player_status_string_to_emoji(player_status['status']),
                 total_length_string=total_length_string,
@@ -158,18 +163,18 @@ class LinkplayCli:
                 artist=artist,
                 title=title,
                 album=album,
-                playlist=None,
+                playlist=playlist,
                 volume=int(player_status['vol']),
                 is_muted=player_status['mute'] == '1',
             )
 
         except LinkplayCliGetRequestUnknownCommandException:
-            return self.upnp_device.get_player_status()
+            return self.upnp_device.get_player_status(resolve_playlist=resolve_playlist)
 
     def now(self, args):
         UNICODE_LTR_MARK = u'\u200E'
 
-        player_status = self._get_player_status()
+        player_status = self._get_player_status(resolve_playlist=args.extra)
 
         output_string = f'{player_status.status_emoji}  {player_status.artist} - {player_status.title}'
         if not args.no_time:

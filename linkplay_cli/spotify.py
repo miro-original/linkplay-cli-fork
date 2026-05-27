@@ -10,7 +10,7 @@ PLAYLIST_ID_IN_TRACK_SOURCE_REGEX = r'spotify:playlist:(?P<playlist_id>[a-zA-Z0-
 COLLECTION_TRACK_SOURCE_REGEX = r'spotify:user:(?P<user_id>[a-zA-Z0-9]+):collection(?::artist:(?P<artist_id>[a-zA-Z0-9]+))?'
 
 
-def _get_playlist_owner(track_source: str) -> Optional[str]:
+def _get_playlist_open_graph_property(track_source: str, property_name: str) -> Optional[str]:
     match_result = re.match(PLAYLIST_ID_IN_TRACK_SOURCE_REGEX, track_source)
     if not match_result:
         logging.debug(f'TrackSource is not a Spotify playlist: {track_source}')
@@ -27,18 +27,30 @@ def _get_playlist_owner(track_source: str) -> Optional[str]:
         return None
 
     soup = BeautifulSoup(playlist_response.text, 'html.parser')
-    og_description = soup.find('meta', property='og:description')
-    og_description_content = og_description.get('content') if og_description else None
-    if not isinstance(og_description_content, str):
-        logging.debug(f'Failed getting Open Graph description: {og_description}')
+    meta = soup.find('meta', property=property_name)
+    content = meta.get('content') if meta else None
+    if not isinstance(content, str):
+        logging.debug(f'Failed getting Open Graph {property_name}: {meta}')
         return None
 
-    soup_match_result = re.match(r'Playlist · (?P<owner>[\w\s]+) ·', og_description_content)
-    if not soup_match_result:
-        logging.debug(f'Failed parsing Open Graph description: {og_description_content}')
+    return content
+
+
+def _get_playlist_owner(track_source: str) -> Optional[str]:
+    description = _get_playlist_open_graph_property(track_source, 'og:description')
+    if description is None:
         return None
 
-    return soup_match_result.group('owner')
+    owner_match_result = re.match(r'Playlist · (?P<owner>[\w\s]+) ·', description)
+    if not owner_match_result:
+        logging.debug(f'Failed parsing Open Graph description: {description}')
+        return None
+
+    return owner_match_result.group('owner')
+
+
+def _get_playlist_name(track_source: str) -> Optional[str]:
+    return _get_playlist_open_graph_property(track_source, 'og:title')
 
 
 def _get_collection_owner(track_source: str) -> Optional[str]:
@@ -93,7 +105,10 @@ def _get_collection_artist(track_source: str) -> Optional[str]:
     return og_title_content
 
 
+# Recognized `track_source` forms:
+#   - spotify:playlist:<id>
+#   - spotify:user:<id>:collection[:artist:<id>]
 def get_playlist_string(track_source: str, known_playlist_name: Optional[str] = None) -> Optional[str]:
-    playlist_name = known_playlist_name or _get_collection_artist(track_source)
+    playlist_name = known_playlist_name or _get_playlist_name(track_source) or _get_collection_artist(track_source)
     playlist_owner = (_get_playlist_owner(track_source) or _get_collection_owner(track_source)) if playlist_name else None
     return f"{playlist_name} by {playlist_owner}" if playlist_owner else playlist_name

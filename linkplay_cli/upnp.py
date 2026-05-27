@@ -25,7 +25,7 @@ class Upnp:
     def _trim_duration_string(duration_string: str) -> str:
         return duration_string.removeprefix('00:0').removeprefix('00:')
 
-    def get_player_status(self):
+    def get_player_status(self, resolve_playlist: bool = False):
         get_info_ex_action = self._av_transport.action('GetInfoEx')
         info = self._call_action_synchronously(get_info_ex_action)
         logging.debug(info)
@@ -39,9 +39,11 @@ class Upnp:
         title = title_element.get_text() if title_element else UNKNOWN_NAME_STRING
         album_element = track_metadata_xml_soup.find('upnp:album')
         album = album_element.get_text() if album_element else UNKNOWN_NAME_STRING
-        playlist_element = track_metadata_xml_soup.find('song:subid')
-        playlist_name = playlist_element.get_text() if playlist_element else None
-        playlist_string = get_playlist_string(info['TrackSource'], known_playlist_name=playlist_name)
+        playlist_string = None
+        if resolve_playlist:
+            playlist_element = track_metadata_xml_soup.find('song:subid')
+            playlist_name = playlist_element.get_text() if playlist_element else None
+            playlist_string = get_playlist_string(info['TrackSource'], known_playlist_name=playlist_name)
 
         playback_mode = int(info['PlayType'])
         if playback_mode in PLAYBACK_MODE_NUMBER_TO_NAME:
