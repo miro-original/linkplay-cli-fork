@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import sys
 import urllib.parse
 import warnings
 from http import HTTPStatus
@@ -75,3 +76,14 @@ def player_status_string_to_emoji(status: str) -> Literal['▶️', '⏸', '⏹�
         return '⏸'
     else:
         return '⏹️'
+
+def is_tarfile_data_filter_supported():
+    # The tarfile extraction `filter='data'` parameter (used to protect from unsafe archives)
+    # landed in 3.12 and was backported to these patch releases.
+    minor_version_to_patch_version = {
+        (3, 9): (3, 9, 17),
+        (3, 10): (3, 10, 12),
+        (3, 11): (3, 11, 4),
+    }
+    minimum_supported_version = minor_version_to_patch_version.get(sys.version_info[:2], (3, 12, 0))
+    return sys.version_info[:3] >= minimum_supported_version

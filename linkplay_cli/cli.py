@@ -1,10 +1,12 @@
 import argparse
 import calendar
 import html
+import io
 import logging
 import math
 import re
 import sys
+import tarfile
 import tempfile
 import time
 from enum import Enum
@@ -24,7 +26,7 @@ from linkplay_cli.spotify import get_playlist_string
 from linkplay_cli.tcp_uart import TcpUart
 from linkplay_cli.upnp import Upnp
 from linkplay_cli.utils import perform_get_request, LinkplayCliGetRequestUnknownCommandException, \
-    player_status_string_to_emoji
+    player_status_string_to_emoji, is_tarfile_data_filter_supported
 
 
 class LinkplayCliCommandFailedException(Exception):
@@ -450,13 +452,26 @@ class LinkplayCli:
         output_file_dir.mkdir(parents=True, exist_ok=True)
         output_file_path = output_file_dir / ('sys.log-' + time.strftime('%Y%m%d%H%M%S'))
 
-        with open(output_file_path, 'wb') as output_file:
-            for chunk_start in range(0, len(encrypted_log), config.log_chunk_size):
-                chunk = encrypted_log[chunk_start:chunk_start + config.log_chunk_size]
-                cipher = ARC4.new(config.log_key)
-                output_file.write(cipher.decrypt(chunk))
+        decrypted_chunks = []
+        for chunk_start in range(0, len(encrypted_log), config.log_chunk_size):
+            chunk = encrypted_log[chunk_start:chunk_start + config.log_chunk_size]
+            cipher = ARC4.new(config.log_key)
+            decrypted_chunks.append(cipher.decrypt(chunk))
+        decrypted_log = b''.join(decrypted_chunks)
 
-        print(f'Log file downloaded to {output_file_path}')
+        gzip_magic_bytes = b'\x1f\x8b\x08'
+        log_is_gzipped = decrypted_log.startswith(gzip_magic_bytes)
+        if log_is_gzipped and is_tarfile_data_filter_supported():
+            output_file_path.mkdir()
+            with tarfile.open(fileobj=io.BytesIO(decrypted_log), mode='r:gz') as tar:
+                tar.extractall(output_file_path, filter='data')
+            print(f'Log files downloaded to {output_file_path}')
+        else:
+            if log_is_gzipped:
+                # .tgz is the extension used for the inner archives as well.
+                output_file_path = output_file_path.with_name(output_file_path.name + '.tgz')
+            output_file_path.write_bytes(decrypted_log)
+            print(f'Log file downloaded to {output_file_path}')
 
 
 def _add_alarm_arg_subparsers(top_subparsers, common_parser):
